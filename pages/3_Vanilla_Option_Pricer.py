@@ -489,9 +489,21 @@ iv_smile = []
 for k in strikes_smile:
     # On génère un "prix de marché" via BS avec notre vol
     mkt_price = black_scholes_price(S, k, T, r, sigma, option_type)
+    
+    # Si le prix est trop petit, la précision flottante empêche
+    # l'inversion → on skip ce strike
+    if mkt_price < 0.001:
+        iv_smile.append(None)
+        continue
+    
     # On retrouve la vol implicite
     iv_val = implied_volatility(mkt_price, S, k, T, r, option_type)
-    iv_smile.append(iv_val if not np.isnan(iv_val) else None)
+    
+    # On vérifie que le résultat est raisonnable (proche de sigma)
+    if iv_val is not None and not np.isnan(iv_val) and abs(iv_val - sigma) < 0.01:
+        iv_smile.append(iv_val)
+    else:
+        iv_smile.append(None)
 
 fig_smile = go.Figure()
 
@@ -500,6 +512,7 @@ fig_smile.add_trace(go.Scatter(
     y=iv_smile,
     line=dict(color="#22d3ee", width=2.5),
     name="Vol implicite",
+    connectgaps=False,  # ne pas connecter les trous
 ))
 
 fig_smile.add_vline(
