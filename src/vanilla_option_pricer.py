@@ -176,19 +176,28 @@ def implied_volatility(
     max_iter: int = 500,
 ) -> float:
     """
-    Calcule la volatilité implicite par Newton-Raphson amélioré.
+    Calcule la volatilité implicite par Newton-Raphson + fallback bissection.
     """
 
-    # Protection de base
     if market_price <= 0 or T <= 0 or S <= 0 or K <= 0:
         return np.nan
 
-    # --- Estimation initiale de σ ---
-    # Brenner-Subrahmanyam pour ATM
+    # Bornes d'arbitrage
+    if option_type == "call":
+        lower_bound = max(S - K * np.exp(-r * T), 0)
+        upper_bound = S
+    else:
+        lower_bound = max(K * np.exp(-r * T) - S, 0)
+        upper_bound = K * np.exp(-r * T)
+
+    if market_price <= lower_bound or market_price >= upper_bound:
+        return np.nan
+
+    # Estimation initiale (Brenner-Subrahmanyam)
     sigma_est = np.sqrt(2 * np.pi / T) * market_price / S
     sigma_est = np.clip(sigma_est, 0.01, 5.0)
 
-    # --- Boucle Newton-Raphson ---
+    # Newton-Raphson avec amortissement
     for i in range(max_iter):
         bs_price = black_scholes_price(S, K, T, r, sigma_est, option_type)
         error = bs_price - market_price
@@ -202,21 +211,16 @@ def implied_volatility(
         vega = S * norm.pdf(d1) * np.sqrt(T)
 
         if vega < 1e-12:
-            # Vega trop petit → on passe en bissection
             break
 
-        # Mise à jour Newton-Raphson avec amortissement
-        # Le facteur 0.5-1.0 empêche les sauts trop grands
         step = error / vega
-        # Si le pas est trop grand par rapport à sigma, on le réduit
         if abs(step) > 0.5 * sigma_est:
             step = 0.5 * sigma_est * np.sign(step)
 
         sigma_est = sigma_est - step
         sigma_est = np.clip(sigma_est, 0.001, 5.0)
 
-    # --- Fallback : bissection si Newton-Raphson n'a pas convergé ---
-    # La bissection est plus lente mais GARANTIT la convergence
+    # Fallback bissection
     sigma_low = 0.001
     sigma_high = 5.0
 
