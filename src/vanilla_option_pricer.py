@@ -179,15 +179,8 @@ def implied_volatility(
     Calcule la volatilité implicite par Newton-Raphson amélioré.
     """
 
-    # --- Vérification : le prix de marché est-il cohérent ? ---
-    if option_type == "call":
-        lower_bound = max(S - K * np.exp(-r * T), 0)
-        upper_bound = S
-    else:
-        lower_bound = max(K * np.exp(-r * T) - S, 0)
-        upper_bound = K * np.exp(-r * T)
-
-    if market_price <= lower_bound or market_price >= upper_bound:
+    # Protection de base
+    if market_price <= 0 or T <= 0 or S <= 0 or K <= 0:
         return np.nan
 
     # --- Estimation initiale de σ ---
