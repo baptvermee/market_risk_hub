@@ -137,23 +137,11 @@ r = r_pct / 100
 st.sidebar.markdown("---")
 st.sidebar.header("STRATÉGIES")
 
-strategy = st.sidebar.selectbox(
-    "Charger une stratégie",
-    [
-        "Personnalisé",
-        "Long Straddle",
-        "Short Straddle",
-        "Bull Call Spread",
-        "Bear Put Spread",
-        "Long Butterfly",
-        "Iron Condor",
-        "Covered Call",
-        "Protective Put",
-    ],
-)
-
-# Stratégies prédéfinies — chaque stratégie est une liste de positions
+# Définition des stratégies
 preset_strategies = {
+    "Personnalisé": [
+        {"type": "call", "strike": 100.0, "maturity": 0.5, "quantity": 1},
+    ],
     "Long Straddle": [
         {"type": "call", "strike": 100.0, "maturity": 0.5, "quantity": 1},
         {"type": "put", "strike": 100.0, "maturity": 0.5, "quantity": 1},
@@ -161,6 +149,10 @@ preset_strategies = {
     "Short Straddle": [
         {"type": "call", "strike": 100.0, "maturity": 0.5, "quantity": -1},
         {"type": "put", "strike": 100.0, "maturity": 0.5, "quantity": -1},
+    ],
+    "Long Strangle": [
+        {"type": "call", "strike": 105.0, "maturity": 0.5, "quantity": 1},
+        {"type": "put", "strike": 95.0, "maturity": 0.5, "quantity": 1},
     ],
     "Bull Call Spread": [
         {"type": "call", "strike": 95.0, "maturity": 0.5, "quantity": 1},
@@ -181,13 +173,45 @@ preset_strategies = {
         {"type": "call", "strike": 105.0, "maturity": 0.5, "quantity": 1},
         {"type": "call", "strike": 110.0, "maturity": 0.5, "quantity": -1},
     ],
-    "Covered Call": [
-        {"type": "call", "strike": 105.0, "maturity": 0.5, "quantity": -1},
-    ],
-    "Protective Put": [
-        {"type": "put", "strike": 95.0, "maturity": 0.5, "quantity": 1},
-    ],
 }
+
+strategy = st.sidebar.selectbox(
+    "Charger une stratégie",
+    list(preset_strategies.keys()),
+)
+
+# =========================
+# Gestion du session_state pour forcer la mise à jour
+# =========================
+
+# Détecter si la stratégie a changé
+if "last_strategy" not in st.session_state:
+    st.session_state.last_strategy = strategy
+
+strategy_changed = (strategy != st.session_state.last_strategy)
+st.session_state.last_strategy = strategy
+
+# Quand la stratégie change, on écrit les nouvelles valeurs dans session_state
+if strategy_changed:
+    preset = preset_strategies[strategy]
+    st.session_state["n_positions"] = len(preset)
+    for i in range(10):  # reset toutes les positions
+        if i < len(preset):
+            st.session_state[f"type_{i}"] = preset[i]["type"]
+            st.session_state[f"strike_{i}"] = preset[i]["strike"]
+            st.session_state[f"mat_{i}"] = preset[i]["maturity"]
+            st.session_state[f"qty_{i}"] = preset[i]["quantity"]
+        else:
+            # Reset les positions en trop
+            if f"type_{i}" in st.session_state:
+                del st.session_state[f"type_{i}"]
+            if f"strike_{i}" in st.session_state:
+                del st.session_state[f"strike_{i}"]
+            if f"mat_{i}" in st.session_state:
+                del st.session_state[f"mat_{i}"]
+            if f"qty_{i}" in st.session_state:
+                del st.session_state[f"qty_{i}"]
+    st.rerun()
 
 # =========================
 # Construction du book
@@ -197,30 +221,22 @@ st.subheader("Construction du book")
 if strategy != "Personnalisé":
     st.info(f"Stratégie chargée : **{strategy}**. Tu peux modifier les positions ci-dessous.")
 
-# Initialiser les positions
-if strategy != "Personnalisé" and strategy in preset_strategies:
-    default_positions = preset_strategies[strategy]
-else:
-    default_positions = [
-        {"type": "call", "strike": 100.0, "maturity": 1.0, "quantity": 1},
-    ]
+preset = preset_strategies[strategy]
 
-# Nombre de positions
 n_positions = st.number_input(
     "Nombre de positions",
     min_value=1, max_value=10,
-    value=len(default_positions),
+    value=len(preset),
     step=1,
+    key="n_positions",
 )
 
-# Saisie de chaque position
 positions = []
 for i in range(int(n_positions)):
     st.markdown(f"#### Position {i+1}")
 
-    # Valeurs par défaut depuis la stratégie
-    default = default_positions[i] if i < len(default_positions) else {
-        "type": "call", "strike": 100.0, "maturity": 1.0, "quantity": 1
+    default = preset[i] if i < len(preset) else {
+        "type": "call", "strike": 100.0, "maturity": 0.5, "quantity": 1
     }
 
     cols = st.columns(4)
@@ -228,26 +244,29 @@ for i in range(int(n_positions)):
     with cols[0]:
         opt_type = st.selectbox(
             f"Type #{i+1}", ["call", "put"],
-            index=0 if default["type"] == "call" else 1,
+            index=0 if default.get("type", "call") == "call" else 1,
             key=f"type_{i}",
         )
 
     with cols[1]:
         strike = st.number_input(
-            f"Strike #{i+1}", min_value=0.01, value=default["strike"],
+            f"Strike #{i+1}", min_value=0.01,
+            value=default.get("strike", 100.0),
             step=1.0, key=f"strike_{i}",
         )
 
     with cols[2]:
         maturity = st.number_input(
-            f"Maturité (ans) #{i+1}", min_value=0.01, value=default["maturity"],
+            f"Maturité (ans) #{i+1}", min_value=0.01,
+            value=default.get("maturity", 0.5),
             step=0.05, key=f"mat_{i}",
         )
 
     with cols[3]:
         quantity = st.number_input(
             f"Quantité #{i+1}", min_value=-100, max_value=100,
-            value=default["quantity"], step=1, key=f"qty_{i}",
+            value=default.get("quantity", 1),
+            step=1, key=f"qty_{i}",
             help="Positif = Long, Négatif = Short",
         )
 
@@ -260,7 +279,7 @@ for i in range(int(n_positions)):
         })
 
 if len(positions) == 0:
-    st.warning("Aucune position active (toutes les quantités sont à 0).")
+    st.warning("Aucune position active.")
     st.stop()
 
 st.markdown('<div class="trading-divider"></div>', unsafe_allow_html=True)
@@ -275,13 +294,12 @@ st.subheader("Greeks agrégés du book")
 col1, col2, col3, col4, col5, col6 = st.columns(6)
 
 col1.metric("Valeur du book", f"{book['total_value']:.4f}")
-col2.metric("Δ Delta net", f"{book['total_delta']:.4f}")
-col3.metric("Γ Gamma net", f"{book['total_gamma']:.4f}")
-col4.metric("Θ Theta net", f"{book['total_theta']:.4f}")
-col5.metric("ν Vega net", f"{book['total_vega']:.4f}")
-col6.metric("ρ Rho net", f"{book['total_rho']:.4f}")
+col2.metric("Δ Delta net", f"{book['total_delta']:+.4f}")
+col3.metric("Γ Gamma net", f"{book['total_gamma']:+.4f}")
+col4.metric("Θ Theta net", f"{book['total_theta']:+.4f}")
+col5.metric("ν Vega net", f"{book['total_vega']:+.4f}")
+col6.metric("ρ Rho net", f"{book['total_rho']:+.4f}")
 
-# Interprétation
 if abs(book["total_delta"]) < 0.05:
     st.markdown('<span class="tag-long">DELTA NEUTRAL</span>', unsafe_allow_html=True)
 elif book["total_delta"] > 0:
@@ -324,30 +342,21 @@ pnl_result = compute_book_pnl(positions, S, r, sigma, spot_range)
 
 fig_pnl = go.Figure()
 
-# P&L actuel (avec valeur temps)
 fig_pnl.add_trace(go.Scatter(
     x=spot_range, y=pnl_result["pnl_current"],
     name="P&L actuel",
     line=dict(color="#22d3ee", width=2.5),
 ))
 
-# P&L à maturité (payoff pur)
 fig_pnl.add_trace(go.Scatter(
     x=spot_range, y=pnl_result["pnl_at_expiry"],
     name="P&L à maturité",
     line=dict(color="#64748b", width=1.5, dash="dash"),
 ))
 
-# Ligne de zéro
 fig_pnl.add_hline(y=0, line_color="#64748b", line_dash="dot")
+fig_pnl.add_vline(x=S, line_dash="dot", line_color="#f59e0b", annotation_text=f"Spot={S}")
 
-# Spot actuel
-fig_pnl.add_vline(
-    x=S, line_dash="dot", line_color="#f59e0b",
-    annotation_text=f"Spot={S}",
-)
-
-# Strikes
 for pos in positions:
     fig_pnl.add_vline(
         x=pos["strike"], line_dash="dot", line_color="rgba(167,139,250,0.3)",
@@ -363,7 +372,7 @@ fig_pnl.update_layout(
 
 st.plotly_chart(fig_pnl, use_container_width=True)
 
-# Breakeven approximatif
+# Breakevens
 breakevens = []
 for i in range(1, len(spot_range)):
     if pnl_result["pnl_at_expiry"][i-1] * pnl_result["pnl_at_expiry"][i] < 0:
@@ -407,7 +416,6 @@ fig_greeks.add_trace(
     row=2, col=2,
 )
 
-# Lignes de zéro et spot actuel sur chaque subplot
 for row in [1, 2]:
     for col in [1, 2]:
         fig_greeks.add_hline(y=0, line_dash="dot", line_color="#64748b", row=row, col=col)
@@ -462,18 +470,17 @@ st.subheader("Récapitulatif")
 
 recap = pd.DataFrame({
     "Paramètre": [
-        "Spot", "Volatilité", "Taux", "Nb positions",
+        "Stratégie", "Spot", "Volatilité", "Taux", "Nb positions",
         "Valeur du book", "Delta net", "Gamma net",
-        "Theta net (/jour)", "Vega net", "Rho net",
+        "Theta net (/jour)", "Vega net",
     ],
     "Valeur": [
-        f"{S:.2f}", f"{sigma:.1%}", f"{r:.1%}", f"{len(positions)}",
+        strategy, f"{S:.2f}", f"{sigma:.1%}", f"{r:.1%}", f"{len(positions)}",
         f"{book['total_value']:.4f}",
         f"{book['total_delta']:+.4f}",
         f"{book['total_gamma']:+.4f}",
         f"{book['total_theta']:+.4f}",
         f"{book['total_vega']:+.4f}",
-        f"{book['total_rho']:+.4f}",
     ],
 })
 
