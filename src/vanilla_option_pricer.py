@@ -172,98 +172,71 @@ def implied_volatility(
     T: float,
     r: float,
     option_type: str = "call",
-    tol: float = 1e-8,
-    max_iter: int = 200,
+    tol: float = 1e-10,
+    max_iter: int = 500,
 ) -> float:
     """
-    Calcule la volatilité implicite par Newton-Raphson.
-
-    On cherche le σ tel que : BS(S, K, T, r, σ) = prix de marché
-
-    Algorithme Newton-Raphson :
-        σ_{n+1} = σ_n - (BS(σ_n) - prix_marché) / vega(σ_n)
-
-    À chaque itération :
-    - On calcule le prix BS avec le σ actuel
-    - On mesure l'erreur (prix BS - prix marché)
-    - On divise par le vega pour obtenir la correction
-    - On met à jour σ
-
-    Paramètres
-    ----------
-    market_price : float
-        Prix observé de l'option sur le marché
-    S : float
-        Prix spot du sous-jacent
-    K : float
-        Strike
-    T : float
-        Maturité en années
-    r : float
-        Taux sans risque
-    option_type : str
-        "call" ou "put"
-    tol : float
-        Tolérance de convergence (on s'arrête quand l'erreur < tol)
-    max_iter : int
-        Nombre maximum d'itérations
-
-    Retourne
-    --------
-    float
-        La volatilité implicite (ex: 0.25 = 25%), ou NaN si pas de convergence
+    Calcule la volatilité implicite par Newton-Raphson amélioré.
     """
 
     # --- Vérification : le prix de marché est-il cohérent ? ---
-    # Un call ne peut pas valoir moins que max(S - K*e^(-rT), 0)
-    # Un put ne peut pas valoir moins que max(K*e^(-rT) - S, 0)
     if option_type == "call":
         lower_bound = max(S - K * np.exp(-r * T), 0)
+        upper_bound = S
     else:
         lower_bound = max(K * np.exp(-r * T) - S, 0)
+        upper_bound = K * np.exp(-r * T)
 
-    if market_price < lower_bound:
-        return np.nan  # Prix sous la borne d'arbitrage
+    if market_price <= lower_bound or market_price >= upper_bound:
+        return np.nan
 
     # --- Estimation initiale de σ ---
-    # On utilise la formule de Brenner-Subrahmanyam :
-    # σ_init ≈ sqrt(2π / T) × prix / S
-    # C'est une approximation rapide pour un call ATM
+    # Brenner-Subrahmanyam pour ATM
     sigma_est = np.sqrt(2 * np.pi / T) * market_price / S
-
-    # On borne entre 1% et 500% pour éviter les valeurs aberrantes
     sigma_est = np.clip(sigma_est, 0.01, 5.0)
 
     # --- Boucle Newton-Raphson ---
     for i in range(max_iter):
-        # Prix BS avec le σ actuel
         bs_price = black_scholes_price(S, K, T, r, sigma_est, option_type)
-
-        # Erreur = différence entre prix théorique et prix de marché
         error = bs_price - market_price
 
-        # Si l'erreur est suffisamment petite, on a convergé
         if abs(error) < tol:
             return float(sigma_est)
 
-        # Vega = sensibilité du prix à σ
-        # On utilise la formule analytique directement ici
-        # (plutôt que d'appeler compute_greeks pour la performance)
         d1 = (np.log(S / K) + (r + 0.5 * sigma_est ** 2) * T) / (
             sigma_est * np.sqrt(T)
         )
         vega = S * norm.pdf(d1) * np.sqrt(T)
 
-        # Si le vega est trop petit, on ne peut pas corriger
-        # (la fonction est trop plate, Newton-Raphson diverge)
         if vega < 1e-12:
-            return np.nan
+            # Vega trop petit → on passe en bissection
+            break
 
-        # Mise à jour de Newton-Raphson
-        sigma_est = sigma_est - error / vega
+        # Mise à jour Newton-Raphson avec amortissement
+        # Le facteur 0.5-1.0 empêche les sauts trop grands
+        step = error / vega
+        # Si le pas est trop grand par rapport à sigma, on le réduit
+        if abs(step) > 0.5 * sigma_est:
+            step = 0.5 * sigma_est * np.sign(step)
 
-        # Garde σ dans des bornes raisonnables
+        sigma_est = sigma_est - step
         sigma_est = np.clip(sigma_est, 0.001, 5.0)
 
-    # Si on arrive ici, l'algorithme n'a pas convergé
-    return np.nan
+    # --- Fallback : bissection si Newton-Raphson n'a pas convergé ---
+    # La bissection est plus lente mais GARANTIT la convergence
+    sigma_low = 0.001
+    sigma_high = 5.0
+
+    for i in range(200):
+        sigma_mid = (sigma_low + sigma_high) / 2
+        bs_mid = black_scholes_price(S, K, T, r, sigma_mid, option_type)
+
+        if abs(bs_mid - market_price) < tol:
+            return float(sigma_mid)
+
+        if bs_mid > market_price:
+            sigma_high = sigma_mid
+        else:
+            sigma_low = sigma_mid
+
+    return float((sigma_low + sigma_high) / 2)
