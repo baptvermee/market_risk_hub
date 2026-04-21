@@ -13,5 +13,5 @@ vanilla = st.Page("pages/3_Vanilla_Option_Pricer.py", title="Vanilla Option Pric
 exotic = st.Page("pages/4_Exotic_Option_Pricer.py", title="Exotic Options", icon="🎲")
 bond = st.Page("pages/5_Bond_Pricer.py", title="Bond Pricer", icon="🏛️")
 
-pg = st.navigation([overview, market_data, risk, vanilla, exotic, bond])
+pg = st.navigation([overview, risk, vanilla, exotic, bond])
 pg.run()
