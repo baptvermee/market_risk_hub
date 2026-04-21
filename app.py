@@ -10,8 +10,9 @@ st.set_page_config(
 overview = st.Page("pages/1_Market_Overview.py", title="Market Overview", icon="📊", default=True)
 risk = st.Page("pages/2_Risk_Analystics.py", title="Risk Analytics", icon="⚠️")
 vanilla = st.Page("pages/3_Vanilla_Option_Pricer.py", title="Vanilla Option Pricer", icon="🎯")
-exotic = st.Page("pages/4_Exotic_Option_Pricer.py", title="Exotic Options Pricer ", icon="🎲")
+exotic = st.Page("pages/4_Exotic_Option_Pricer.py", title="Exotic Options Pricer", icon="🎲")
 bond = st.Page("pages/5_Bond_Pricer.py", title="Bond Pricer", icon="🏛️")
+book = st.Page("pages/6_Options_Book.py", title="Options Book", icon="📒")
 
-pg = st.navigation([overview, risk, vanilla, exotic, bond])
+pg = st.navigation([overview, risk, vanilla, exotic, bond, book])
 pg.run()
