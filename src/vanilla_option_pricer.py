@@ -1,12 +1,3 @@
-"""
-option_pricer.py
-----------------
-Moteur de pricing d'options vanilles (Black-Scholes)
-et calcul des Greeks.
-
-Aucune dépendance à Streamlit.
-"""
-
 import numpy as np
 from scipy.stats import norm
 
@@ -19,38 +10,12 @@ def black_scholes_price(
     sigma: float,
     option_type: str = "call",
 ) -> float:
-    """
-    Prix d'une option européenne via Black-Scholes.
-
-    Paramètres
-    ----------
-    S : float
-        Prix spot du sous-jacent
-    K : float
-        Strike (prix d'exercice)
-    T : float
-        Temps jusqu'à maturité (en années). Ex: 0.25 = 3 mois
-    r : float
-        Taux sans risque annualisé (ex: 0.05 = 5%)
-    sigma : float
-        Volatilité annualisée (ex: 0.20 = 20%)
-    option_type : str
-        "call" ou "put"
-
-    Retourne
-    --------
-    float
-        Prix théorique de l'option
-    """
-
-    # Protection : si T = 0, l'option est expirée → payoff intrinsèque
     if T <= 0:
         if option_type == "call":
             return max(S - K, 0.0)
         else:
             return max(K - S, 0.0)
 
-    # Protection : si sigma = 0, pas d'incertitude → valeur actualisée du payoff
     if sigma <= 0:
         if option_type == "call":
             return max(S - K * np.exp(-r * T), 0.0)
@@ -76,42 +41,6 @@ def compute_greeks(
     sigma: float,
     option_type: str = "call",
 ) -> dict:
-    """
-    Calcule les Greeks d'une option européenne.
-
-    Les Greeks mesurent la sensibilité du prix de l'option
-    à chaque paramètre. En salle de marché, ce sont les
-    indicateurs de risque principaux sur un book d'options.
-
-    Delta : dC/dS — de combien bouge le prix si S bouge de 1$
-        Call : entre 0 et 1  (un call deep ITM a un delta ~1)
-        Put  : entre -1 et 0 (un put deep ITM a un delta ~-1)
-
-    Gamma : d²C/dS² — de combien bouge le delta si S bouge de 1$
-        Toujours positif. Maximum quand l'option est ATM.
-        Un gamma élevé = le delta change vite = risque de hedging.
-
-    Theta : dC/dT — combien l'option perd par jour qui passe
-        Presque toujours négatif (l'option perd de la valeur avec le temps).
-        On le divise par 365 pour avoir la perte PAR JOUR.
-
-    Vega : dC/dσ — de combien bouge le prix si la vol bouge de 1%
-        Toujours positif. On le divise par 100 pour avoir
-        la sensibilité à 1 point de volatilité.
-
-    Rho : dC/dr — de combien bouge le prix si le taux bouge de 1%
-        Call : positif (un taux plus haut augmente la valeur du call)
-        Put  : négatif
-
-    Paramètres
-    ----------
-    S, K, T, r, sigma, option_type : mêmes que black_scholes_price
-
-    Retourne
-    --------
-    dict avec : delta, gamma, theta, vega, rho
-    """
-
     if T <= 0 or sigma <= 0:
         return {
             "delta": 1.0 if option_type == "call" and S > K else (
@@ -132,11 +61,10 @@ def compute_greeks(
     else:
         delta = norm.cdf(d1) - 1  # = -N(-d1)
 
-    # --- Gamma (identique pour call et put) ---
+    # --- Gamma ---
     gamma = norm.pdf(d1) / (S * sigma * np.sqrt(T))
 
     # --- Theta ---
-    # Composante commune liée au time decay de la volatilité
     theta_common = -(S * norm.pdf(d1) * sigma) / (2 * np.sqrt(T))
 
     if option_type == "call":
@@ -144,11 +72,9 @@ def compute_greeks(
     else:
         theta = theta_common + r * K * np.exp(-r * T) * norm.cdf(-d2)
 
-    # On convertit en theta PAR JOUR (le trader veut savoir combien il perd par jour)
     theta_daily = theta / 365
 
     # --- Vega ---
-    # Sensibilité à 1 point de vol (pas 100%)
     vega = S * norm.pdf(d1) * np.sqrt(T) / 100
 
     # --- Rho ---
@@ -175,10 +101,6 @@ def implied_volatility(
     tol: float = 1e-10,
     max_iter: int = 500,
 ) -> float:
-    """
-    Calcule la volatilité implicite par Newton-Raphson + fallback bissection.
-    """
-
     if market_price <= 0 or T <= 0 or S <= 0 or K <= 0:
         return np.nan
 

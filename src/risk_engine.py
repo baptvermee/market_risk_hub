@@ -1,14 +1,3 @@
-"""
-risk_engine.py
---------------
-Moteur de calcul du risque de marché.
-
-Contient les fonctions de calcul de VaR, Expected Shortfall,
-volatilité, drawdown, et les métriques associées.
-
-Aucune dépendance à Streamlit — ce module est purement analytique.
-"""
-
 import numpy as np
 import pandas as pd
 from scipy.stats import norm
@@ -74,11 +63,6 @@ def monte_carlo_multivariate(
     cov = np.cov(returns_array, rowvar=False)
 
     # --- CAS LIMITE : un seul actif ---
-    # np.cov renvoie un scalaire quand il n'y a qu'une colonne
-    # On le force en matrice 2D pour que Cholesky fonctionne
-    # np.atleast_2d transforme :
-    #   - un scalaire 0.0004 → une matrice [[0.0004]]
-    #   - une matrice déjà 2D → reste inchangée
     cov = np.atleast_2d(cov)
 
     L = np.linalg.cholesky(cov)
