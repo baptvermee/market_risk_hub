@@ -111,7 +111,7 @@ st.sidebar.header("PARAMÈTRES")
 st.sidebar.markdown("#### Portefeuille")
 tickers_input = st.sidebar.text_input(
     "Tickers (séparés par des virgules)",
-    value="SPY"
+    value="aapl"
 )
 tickers = [t.strip().upper() for t in tickers_input.split(",") if t.strip() != ""]
 
